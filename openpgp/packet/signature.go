@@ -73,6 +73,10 @@ type Signature struct {
 	IsPrimaryId                                             *bool
 	Notations                                               []*Notation
 
+	// ExportableCertification is set if a certification signature is exportable.
+	// See RFC 4880, section 5.2.3.11 for details.
+	ExportableCertification bool
+
 	// TrustLevel and TrustAmount can be set by the signer to assert that
 	// the key is not only valid but also trustworthy at the specified
 	// level.
@@ -149,6 +153,10 @@ func (sig *Signature) parse(r io.Reader) (err error) {
 	if !ok {
 		return errors.UnsupportedError("hash function " + strconv.Itoa(int(buf[2])))
 	}
+
+	// ExportableCertification is exportable by default.
+	// See RFC 4880. section 5.2.3.11 for details
+	sig.ExportableCertification = true
 
 	hashedSubpacketsLength := int(buf[3])<<8 | int(buf[4])
 	hashedSubpackets := make([]byte, hashedSubpacketsLength)
@@ -244,6 +252,7 @@ type signatureSubpacketType uint8
 const (
 	creationTimeSubpacket        signatureSubpacketType = 2
 	signatureExpirationSubpacket signatureSubpacketType = 3
+	exportableCertification      signatureSubpacketType = 4
 	trustSubpacket               signatureSubpacketType = 5
 	regularExpressionSubpacket   signatureSubpacketType = 6
 	keyExpirationSubpacket       signatureSubpacketType = 9
@@ -330,6 +339,12 @@ func parseSignatureSubpacket(sig *Signature, subpacket []byte, isHashed bool) (r
 		}
 		sig.SigLifetimeSecs = new(uint32)
 		*sig.SigLifetimeSecs = binary.BigEndian.Uint32(subpacket)
+	case exportableCertification:
+		// Exportable Certification, section 5.2.3.11
+		if len(subpacket) != 1 {
+			err = errors.StructuralError("exportable certification packet with bad length")
+		}
+		sig.ExportableCertification = subpacket[0] == uint8(1)
 	case trustSubpacket:
 		if len(subpacket) != 2 {
 			err = errors.StructuralError("trust subpacket with bad length")
